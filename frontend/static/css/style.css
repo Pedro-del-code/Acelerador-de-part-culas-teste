@@ -336,3 +336,59 @@ header .tagline {
   letter-spacing: 0.1em;
   margin-left: auto;
 }
+
+/* ── Mobile ─────────────────────────────────────────────────────────────────── */
+@media (max-width: 800px) {
+  body {
+    padding: 12px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    justify-content: flex-start;
+  }
+
+  header h1 { font-size: 2rem; letter-spacing: 0.3em; }
+
+  /* Empilha tudo em coluna única */
+  .main-layout {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Canvas menor e centralizado */
+  .canvas-wrap { order: -1; }
+  #ring-canvas {
+    width: 300px !important;
+    height: 300px !important;
+  }
+
+  /* Botões maiores pra toque */
+  .btn-cmd {
+    padding: 14px 16px;
+    font-size: 0.7rem;
+  }
+
+  /* Medidores em grid 2 colunas */
+  .panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  /* Controles ocupam linha inteira */
+  .controls {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .log-box { grid-column: 1 / -1; }
+
+  /* Status bar compacta */
+  .status-bar {
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+  }
+  .uptime { margin-left: 0; }
+}
