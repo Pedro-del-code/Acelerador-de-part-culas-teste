@@ -3,113 +3,72 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HADRON — LHC Simulator</title>
-  <link rel="stylesheet" href="/static/css/style.css">
+  <title>HADRON — Particle Accelerator Simulator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
 
-  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <!-- ── Cabeçalho ──────────────────────────────────────────────────────── -->
   <header>
-    <h1>H A D R O N</h1>
-    <div class="tagline">LARGE HADRON COLLIDER SIMULATOR · CERN-MOCK FACILITY · v4.0</div>
-    <div class="header-meta">
-      <span id="state-badge" class="state-badge state-idle">IDLE</span>
-      <span id="fill-number" style="font-size:0.44rem;letter-spacing:0.2em;color:var(--text-dim)">FILL #1</span>
-    </div>
+    <h1>HADRON</h1>
+    <div class="tagline">LARGE HADRON COLLIDER SIMULATOR · CERN-MOCK FACILITY · v3.0</div>
+    <div id="state-badge" class="state-badge state-idle">IDLE</div>
   </header>
 
-  <!-- ── Layout principal ────────────────────────────────────────────────── -->
+  <!-- ── Layout principal: painel esq | canvas | painel dir ─────────────── -->
   <div class="main-layout">
 
-    <!-- ── Painel Esquerdo ─────────────────────────────────────────────── -->
+    <!-- PAINEL ESQUERDO — parâmetros do feixe -->
     <div class="panel">
 
-      <!-- Energia -->
+      <!-- Energia do feixe -->
       <div class="meter">
         <div class="meter-label">BEAM ENERGY</div>
         <div class="meter-value" id="m-energy-val">0.00</div>
         <div class="meter-unit">TeV POR FEIXE</div>
-        <div class="bar-track"><div class="bar-fill" id="m-energy-bar"></div></div>
+        <div class="bar-track"><div class="bar-fill" id="m-energy-bar" style="width:0%"></div></div>
       </div>
 
-      <!-- Energia CM -->
-      <div class="meter meter-hot">
-        <div class="meter-label">ENERGIA NO CM  √s</div>
-        <div class="meter-value" id="m-ecm-val">0.00</div>
-        <div class="meter-unit">TeV (2×FEIXES)</div>
-      </div>
-
-      <!-- Fator de Lorentz -->
+      <!-- Fator de Lorentz γ -->
       <div class="meter">
         <div class="meter-label">FATOR DE LORENTZ γ</div>
         <div class="meter-value" id="m-gamma-val">1</div>
         <div class="meter-unit">γ = E_total / m₀c²</div>
-        <div class="bar-track"><div class="bar-fill" id="m-gamma-bar"></div></div>
+        <div class="bar-track"><div class="bar-fill" id="m-gamma-bar" style="width:0%"></div></div>
       </div>
 
-      <!-- Beta -->
+      <!-- β = v/c -->
       <div class="meter">
         <div class="meter-label">VELOCIDADE β (v/c)</div>
         <div class="meter-value" id="m-beta-val">0.000000</div>
         <div class="meter-unit">FRAÇÃO DA VELOCIDADE DA LUZ</div>
-        <div class="bar-track"><div class="bar-fill" id="m-beta-bar"></div></div>
+        <div class="bar-track"><div class="bar-fill" id="m-beta-bar" style="width:0%"></div></div>
       </div>
 
-      <!-- Campo dipolar -->
+      <!-- Campo magnético -->
       <div class="meter">
         <div class="meter-label">CAMPO DIPOLAR</div>
         <div class="meter-value" id="m-magnetic-val">0.00</div>
-        <div class="meter-unit">TESLA (máx 8.33 T — NbTi)</div>
-        <div class="bar-track"><div class="bar-fill" id="m-magnetic-bar"></div></div>
+        <div class="meter-unit">TESLA (máx 8.33 T)</div>
+        <div class="bar-track"><div class="bar-fill" id="m-magnetic-bar" style="width:0%"></div></div>
       </div>
 
-      <!-- Temperatura -->
+      <!-- Temperatura criogênica -->
       <div class="meter">
         <div class="meter-label">TEMPERATURA</div>
-        <div class="meter-value" id="m-temp-val">1.900</div>
+        <div class="meter-value" id="m-temp-val">1.90</div>
         <div class="meter-unit">KELVIN (He superfluido)</div>
-        <div class="bar-track"><div class="bar-fill" id="m-temp-bar"></div></div>
-      </div>
-
-      <!-- Corrente de feixe -->
-      <div class="meter">
-        <div class="meter-label">CORRENTE DO FEIXE</div>
-        <div class="meter-value" id="m-current-val">0.0</div>
-        <div class="meter-unit">mA POR FEIXE</div>
-        <div class="bar-track"><div class="bar-fill" id="m-current-bar"></div></div>
-      </div>
-
-      <!-- Radiação síncrotron -->
-      <div class="meter" style="--accent: #cc8800;">
-        <div class="meter-label">PERDA SÍNCROTRON</div>
-        <div class="meter-value" id="m-synrad-val" style="font-size:1.2rem;color:#cc8800">0.0</div>
-        <div class="meter-unit">keV / VOLTA</div>
-      </div>
-
-      <!-- Alarmes -->
-      <div class="alarm-box">
-        <div class="alarm-box-header">
-          ⚠ ALARMES
-          <span class="alarm-count-badge" id="alarm-count"></span>
-        </div>
-        <div id="alarm-panel">
-          <div class="alarm-ok">✓ SEM ALARMES ATIVOS</div>
-        </div>
+        <div class="bar-track"><div class="bar-fill" id="m-temp-bar" style="width:1%; background:var(--accent)"></div></div>
       </div>
 
     </div>
 
-    <!-- ── Canvas central ──────────────────────────────────────────────── -->
+    <!-- CANVAS + STATUS BAR -->
     <div class="canvas-wrap">
-      <canvas id="ring-canvas" width="460" height="460"></canvas>
+      <canvas id="ring-canvas" width="480" height="480"></canvas>
 
-      <!-- Gráfico de energia -->
-      <div class="energy-chart-wrap" style="width: 460px;">
-        <canvas id="energy-chart" width="460" height="55"></canvas>
-      </div>
-
-      <!-- Status bar do anel -->
-      <div class="status-bar" style="max-width:460px; margin-top:0;">
+      <!-- Indicadores de sistema -->
+      <div class="status-bar">
         <div class="status-item">
           <div class="dot dot-active" id="dot-cryo"></div>
           CRIOGÊNICO
@@ -126,104 +85,41 @@
           <div class="dot dot-inactive" id="dot-coll"></div>
           COLISÃO
         </div>
-        <div class="status-item">
-          <div class="dot dot-inactive" id="dot-fault" style="background:#0a0a0a"></div>
-          FAULT
+        <div class="uptime">
+          UP: <span id="uptime">00:00:00</span>
         </div>
-        <div class="uptime" id="uptime">UP: 00:00:00</div>
       </div>
-
-      <!-- Controles -->
-      <div class="controls" style="width:460px;">
-        <button class="btn-cmd" onclick="cmdInject()">
-          [ INJECT BEAM ]
-          <span class="btn-sub">LINAC4 → Booster → PS → SPS → LHC · 2556 bunches</span>
-        </button>
-        <button class="btn-cmd" onclick="cmdAccelerate()">
-          [ ACCELERATE ]
-          <span class="btn-sub">Cavidades RF 400 MHz · 0.45 → 6.8 TeV</span>
-        </button>
-        <button class="btn-cmd" onclick="cmdCollide()">
-          [ COLLIDE ]
-          <span class="btn-sub">IP1 · IP5 · IP2 · IP8 — ativar detectores abaixo</span>
-        </button>
-        <button class="btn-cmd btn-dump" onclick="cmdDump()">
-          [ DUMP BEAM ]
-          <span class="btn-sub">Abort kicker — grafite beam dump</span>
-        </button>
-      </div>
-
     </div>
 
-    <!-- ── Painel Direito ───────────────────────────────────────────────── -->
+    <!-- PAINEL DIREITO — controles e telemetria de colisão -->
     <div class="panel">
 
-      <!-- Detectores -->
-      <div style="font-size:0.40rem; letter-spacing:0.18em; color:var(--text-dim); margin-bottom:2px;">
-        INTERACTION POINTS — clique para ativar
-      </div>
-      <div class="detectors-grid">
-
-        <div class="detector-card det-inactive" id="det-IP1" data-ip="IP1" onclick="toggleDet('IP1')">
-          <div class="det-header">
-            <span class="det-ip">IP1</span>
-            <div class="det-status-dot"></div>
-          </div>
-          <div class="det-name">ATLAS</div>
-          <div class="det-lumi" style="font-size:0.75rem">—</div>
-          <div class="det-pileup"></div>
-          <div class="det-intlumi"></div>
-        </div>
-
-        <div class="detector-card det-inactive" id="det-IP5" data-ip="IP5" onclick="toggleDet('IP5')">
-          <div class="det-header">
-            <span class="det-ip">IP5</span>
-            <div class="det-status-dot"></div>
-          </div>
-          <div class="det-name">CMS</div>
-          <div class="det-lumi" style="font-size:0.75rem">—</div>
-          <div class="det-pileup"></div>
-          <div class="det-intlumi"></div>
-        </div>
-
-        <div class="detector-card det-inactive" id="det-IP2" data-ip="IP2" onclick="toggleDet('IP2')">
-          <div class="det-header">
-            <span class="det-ip">IP2</span>
-            <div class="det-status-dot"></div>
-          </div>
-          <div class="det-name">ALICE</div>
-          <div class="det-lumi" style="font-size:0.75rem">—</div>
-          <div class="det-pileup"></div>
-          <div class="det-intlumi"></div>
-        </div>
-
-        <div class="detector-card det-inactive" id="det-IP8" data-ip="IP8" onclick="toggleDet('IP8')">
-          <div class="det-header">
-            <span class="det-ip">IP8</span>
-            <div class="det-status-dot"></div>
-          </div>
-          <div class="det-name">LHCb</div>
-          <div class="det-lumi" style="font-size:0.75rem">—</div>
-          <div class="det-pileup"></div>
-          <div class="det-intlumi"></div>
-        </div>
-
+      <!-- Botões de comando do operador -->
+      <div class="controls">
+        <button class="btn-cmd" onclick="cmdInject()">
+          [ INJECT BEAM ]<br>
+          <span style="font-size:0.42rem;color:var(--text-dim)">SPS → LHC · 2556 bunches</span>
+        </button>
+        <button class="btn-cmd" onclick="cmdAccelerate()">
+          [ ACCELERATE ]<br>
+          <span style="font-size:0.42rem;color:var(--text-dim)">Cavidades RF 400 MHz</span>
+        </button>
+        <button class="btn-cmd btn-danger" onclick="cmdCollide()">
+          [ COLLIDE ]<br>
+          <span style="font-size:0.42rem">IP1 · IP5 · IP2 · IP8</span>
+        </button>
+        <button class="btn-cmd btn-dump" onclick="cmdDump()">
+          [ DUMP BEAM ]<br>
+          <span style="font-size:0.42rem;color:var(--text-dim)">Abort kicker — reset</span>
+        </button>
       </div>
 
-      <!-- Luminosidade total -->
+      <!-- Luminosidade -->
       <div class="meter meter-lumi">
-        <div class="meter-label">LUMINOSIDADE TOTAL</div>
+        <div class="meter-label">LUMINOSIDADE INSTANTÂNEA</div>
         <div class="meter-value" id="m-lumi-val">0</div>
-        <div class="meter-unit">cm⁻² s⁻¹ (todos IPs)</div>
-        <div class="bar-track"><div class="bar-fill" id="m-lumi-bar"></div></div>
-      </div>
-
-      <!-- Pileup -->
-      <div class="meter">
-        <div class="meter-label">PILEUP μ</div>
-        <div class="meter-value" id="m-pileup-val">0.0</div>
-        <div class="meter-unit">INTERAÇÕES / CRUZAMENTO</div>
-        <div class="bar-track"><div class="bar-fill" id="m-pileup-bar"></div></div>
+        <div class="meter-unit">cm⁻² s⁻¹</div>
+        <div class="bar-track"><div class="bar-fill" id="m-lumi-bar" style="width:0%"></div></div>
       </div>
 
       <!-- Taxa de colisão -->
@@ -231,22 +127,14 @@
         <div class="meter-label">TAXA DE COLISÃO</div>
         <div class="meter-value" id="m-coll-val">0</div>
         <div class="meter-unit">EVENTOS / SEGUNDO</div>
-        <div class="bar-track"><div class="bar-fill" id="m-coll-bar"></div></div>
+        <div class="bar-track"><div class="bar-fill" id="m-coll-bar" style="width:0%; background:var(--hot)"></div></div>
       </div>
 
-      <!-- Colisões totais -->
+      <!-- Total de colisões -->
       <div class="meter">
         <div class="meter-label">COLISÕES TOTAIS</div>
-        <div class="meter-value" id="m-total-val" style="font-size:1.2rem">0</div>
+        <div class="meter-value" id="m-total-val">0</div>
         <div class="meter-unit">EVENTOS ACUMULADOS</div>
-      </div>
-
-      <!-- Luminosidade integrada -->
-      <div class="meter meter-purple">
-        <div class="meter-label">LUMI INTEGRADA</div>
-        <div class="meter-value" id="m-intlumi-val">0.0000</div>
-        <div class="meter-unit">fb⁻¹ ACUMULADO</div>
-        <div class="bar-track"><div class="bar-fill" id="m-intlumi-bar"></div></div>
       </div>
 
       <!-- Bunches -->
@@ -254,25 +142,10 @@
         <div class="meter-label">BUNCHES POR FEIXE</div>
         <div class="meter-value" id="m-bunches-val">0</div>
         <div class="meter-unit">DE 2556 MÁXIMO</div>
-        <div class="bar-track"><div class="bar-fill" id="m-bunches-bar"></div></div>
+        <div class="bar-track"><div class="bar-fill" id="m-bunches-bar" style="width:0%"></div></div>
       </div>
 
-      <!-- Emitância -->
-      <div class="meter">
-        <div class="meter-label">EMITÂNCIA NORM. εₙ</div>
-        <div class="meter-value" id="m-emittance-val">3.75</div>
-        <div class="meter-unit">μm · rad (nominal 3.75)</div>
-        <div class="bar-track"><div class="bar-fill" id="m-emittance-bar"></div></div>
-      </div>
-
-      <!-- Tune -->
-      <div class="meter">
-        <div class="meter-label">TUNE  Qx / Qy</div>
-        <div class="meter-value" id="m-tune-val" style="font-size:1.0rem">— / —</div>
-        <div class="meter-unit">OSCILAÇÕES DE BETATRON / VOLTA</div>
-      </div>
-
-      <!-- Log -->
+      <!-- Log de sistema -->
       <div class="log-box">
         <div id="log-container"></div>
       </div>
@@ -280,6 +153,6 @@
     </div>
   </div>
 
-  <script src="/static/js/accelerator.js"></script>
+  <script src="{{ url_for('static', filename='js/accelerator.js') }}"></script>
 </body>
 </html>
