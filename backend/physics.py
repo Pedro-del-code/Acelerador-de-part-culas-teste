@@ -1,160 +1,153 @@
 """
-physics.py — Motor de física do acelerador de partículas
-=========================================================
+physics.py — Motor de física do acelerador (v2)
+================================================
 
-Este módulo é o coração da simulação. Ele calcula:
-  - Energia relativística das partículas
-  - Campo magnético necessário para curvar o feixe
-  - Luminosidade do feixe
-  - Detecção e estatísticas de colisão
-
-Conceitos físicos usados:
-  - Relatividade especial (fator de Lorentz γ)
-  - Equação do ciclotron: p = qBr
-  - Luminosidade: L = f · n₁ · n₂ / A
+Física expandida:
+  - Relatividade especial (γ, β)
+  - Campo magnético do ciclotron
+  - Luminosidade e taxa de colisão
+  - Radiação síncrotron (perda de energia por volta)
+  - Beam lifetime (decaimento natural do feixe)
+  - Emittance transversal (qualidade do feixe)
+  - Seção de choque pp variável com energia
 """
 
 import math
 
+# ── Constantes físicas ───────────────────────────────────────────────────────
+SPEED_OF_LIGHT   = 2.998e8      # m/s
+PROTON_MASS_KG   = 1.6726e-27   # kg
+PROTON_CHARGE    = 1.602e-19    # C
+GEV_PER_JOULE    = 6.242e9
+TEV_PER_GEV      = 1e-3
+PROTON_MASS_GEV  = PROTON_MASS_KG * SPEED_OF_LIGHT**2 * GEV_PER_JOULE  # 0.938 GeV
 
-# ── Constantes físicas (SI) ──────────────────────────────────────────────────
+# Parâmetros do LHC
+LHC_RADIUS_M         = 2804.0
+LHC_CIRCUMFERENCE_M  = 2 * math.pi * LHC_RADIUS_M
+LHC_REVOLUTION_FREQ  = SPEED_OF_LIGHT / LHC_CIRCUMFERENCE_M   # ~11245 Hz
+LHC_MAX_ENERGY_TEV   = 6.8
+LHC_PARTICLES_BUNCH  = 1.15e11
+LHC_BEAM_SIGMA_M     = 16.7e-6
+LHC_MAX_FIELD_T      = 8.33
+LHC_CRYO_TEMP_K      = 1.9
 
-SPEED_OF_LIGHT = 3e8          # m/s — velocidade da luz
-PROTON_MASS_KG = 1.6726e-27   # kg  — massa de repouso do próton
-PROTON_CHARGE  = 1.602e-19    # C   — carga elementar
-GEV_PER_JOULE  = 6.242e9      # conversão: 1 J = 6.242×10⁹ GeV
-TEV_PER_GEV    = 1e-3         # 1 TeV = 1000 GeV
-
-# Massa de repouso do próton em GeV (E₀ = m₀c²)
-PROTON_MASS_GEV = PROTON_MASS_KG * SPEED_OF_LIGHT**2 * GEV_PER_JOULE  # ≈ 0.938 GeV
-
-
-# ── Funções de física relativística ─────────────────────────────────────────
 
 def lorentz_factor(energy_tev: float) -> float:
-    """
-    Calcula o fator de Lorentz γ (gamma) de um próton.
-
-    γ = E_total / E_repouso = (E_cinética + m₀c²) / m₀c²
-
-    Para altíssimas energias, γ >> 1 significa que o próton
-    viaja a fração enorme da velocidade da luz.
-
-    Args:
-        energy_tev: Energia cinética do próton em TeV
-
-    Returns:
-        γ (adimensional) — tipicamente ~7000 no LHC real
-    """
-    energy_gev = energy_tev / TEV_PER_GEV          # converte TeV → GeV
-    total_energy_gev = energy_gev + PROTON_MASS_GEV # E_total = E_cin + m₀c²
-    return total_energy_gev / PROTON_MASS_GEV        # γ = E_total / m₀c²
+    """γ = E_total / m₀c²"""
+    energy_gev = energy_tev / TEV_PER_GEV
+    return (energy_gev + PROTON_MASS_GEV) / PROTON_MASS_GEV
 
 
 def velocity_fraction(gamma: float) -> float:
-    """
-    Calcula v/c a partir do fator de Lorentz.
-
-    Da relatividade: γ = 1/√(1 - v²/c²)
-    Isolando:        v/c = √(1 - 1/γ²)
-
-    Args:
-        gamma: Fator de Lorentz γ
-
-    Returns:
-        v/c — fração da velocidade da luz (0 a 1)
-    """
-    return math.sqrt(1 - 1 / gamma**2)
+    """β = v/c = √(1 - 1/γ²)"""
+    return math.sqrt(1.0 - 1.0 / gamma**2)
 
 
-def magnetic_field_tesla(energy_tev: float, ring_radius_m: float) -> float:
-    """
-    Campo magnético necessário para manter o próton no anel.
-
-    Da equação do ciclotron relativístico:
-        p = γ·m₀·v  (momento relativístico)
-        p = q·B·r   (equilíbrio centrípeto/magnético)
-    Logo:
-        B = p / (q·r) = γ·m₀·v / (q·r)
-
-    Args:
-        energy_tev:    Energia em TeV
-        ring_radius_m: Raio do anel em metros
-
-    Returns:
-        Campo B em Tesla (LHC real usa ~8.33 T)
-    """
+def magnetic_field_tesla(energy_tev: float) -> float:
+    """B = γ·m₀·v / (q·r)"""
+    if energy_tev <= 0:
+        return 0.0
     gamma = lorentz_factor(energy_tev)
-    v = velocity_fraction(gamma) * SPEED_OF_LIGHT   # velocidade em m/s
-    momentum = gamma * PROTON_MASS_KG * v           # momento relativístico (kg·m/s)
-    return momentum / (PROTON_CHARGE * ring_radius_m)
+    v = velocity_fraction(gamma) * SPEED_OF_LIGHT
+    momentum = gamma * PROTON_MASS_KG * v
+    return momentum / (PROTON_CHARGE * LHC_RADIUS_M)
 
 
-def luminosity(
-    n_bunches: int,
-    particles_per_bunch: float,
-    revolution_freq_hz: float,
-    beam_sigma_m: float
-) -> float:
+def synchrotron_energy_loss_gev(energy_tev: float) -> float:
     """
-    Luminosidade instantânea do feixe (cm⁻²·s⁻¹).
+    Energia perdida por radiação síncrotron por volta (GeV).
 
-    L = f · nb · N² / (4π·σx·σy)
+    U₀ = (4/3) · (r_p / (m_p c²)³) · E⁴ / R
 
-    Onde:
-        f   = frequência de revolução
-        nb  = número de bunches por feixe
-        N   = partículas por bunch
-        σ   = tamanho transversal do feixe (assumindo σx = σy)
+    Forma simplificada para prótons:
+      U₀ [GeV] ≈ C_γ · E⁴ [GeV] / R [m]
+      C_γ = 8.85×10⁻⁵ m/GeV³
 
-    Args:
-        n_bunches:           Número de bunches por feixe
-        particles_per_bunch: Partículas em cada bunch (N)
-        revolution_freq_hz:  Frequência de revolução em Hz
-        beam_sigma_m:        Tamanho do feixe em metros (σ)
-
-    Returns:
-        Luminosidade em cm⁻²·s⁻¹
+    No LHC real: ~6.7 keV/volta a 6.5 TeV (muito pequeno).
     """
-    sigma_cm = beam_sigma_m * 100                        # m → cm
-    area_cm2 = 4 * math.pi * sigma_cm**2                # área efetiva de colisão
-    return (revolution_freq_hz * n_bunches * particles_per_bunch**2) / area_cm2
+    # Constante correta para prótons (PDG): C_γ = C_γe × (me/mp)³
+    # Calibrada para ~8 keV/volta a 6.8 TeV (valor real do LHC)
+    Cgamma = 1.0491e-17      # m GeV⁻³ (para prótons, calibrado para LHC Run 3)
+    energy_gev = energy_tev / TEV_PER_GEV
+    return Cgamma * energy_gev**4 / LHC_RADIUS_M
+
+
+def luminosity(n_bunches: int, particles_per_bunch: float,
+               beam_sigma_m: float) -> float:
+    """L = f · nb · N² / (4π·σ²)  [cm⁻²s⁻¹]"""
+    sigma_cm = beam_sigma_m * 100
+    area = 4 * math.pi * sigma_cm**2
+    return (LHC_REVOLUTION_FREQ * n_bunches * particles_per_bunch**2) / area
+
+
+def pp_cross_section_mb(energy_tev: float) -> float:
+    """
+    Seção de choque pp variável com energia (Donnachie-Landshoff).
+
+    σ_pp ≈ 21.7 · s^0.0808 + 56.1 · s^(-0.4525)  [mb]
+    onde √s = 2·E (energia do CM em TeV)
+
+    Valores de referência:
+      7 TeV  → ~98 mb
+      13 TeV → ~111 mb
+    """
+    sqrt_s = 2 * energy_tev   # energia centro de massa
+    if sqrt_s <= 0:
+        return 100.0
+    s = sqrt_s**2
+    return 21.7 * s**0.0808 + 56.1 * s**(-0.4525)
 
 
 def collision_rate(lumi: float, cross_section_mb: float) -> float:
+    """R = L · σ  [eventos/s]"""
+    return lumi * cross_section_mb * 1e-27
+
+
+def beam_lifetime_hours(energy_tev: float, n_bunches: int,
+                        emittance_um: float) -> float:
     """
-    Taxa de eventos de colisão por segundo.
+    Tempo de vida do feixe em horas.
 
-    R = L · σ
+    Limitado por:
+      - Colisões (burn-off de partículas)
+      - Emittance crescente (feixe se alargando)
+      - Espalhamento residual de gás
 
-    Onde σ é a seção de choque (cross section) — probabilidade
-    de interação. Para próton-próton em 13 TeV: σ ≈ 100 mb.
-
-    Args:
-        lumi:             Luminosidade em cm⁻²·s⁻¹
-        cross_section_mb: Seção de choque em millibarn (1 mb = 10⁻²⁷ cm²)
-
-    Returns:
-        Taxa de colisões por segundo
+    Aproximação empírica baseada no LHC Run 2:
+      τ ≈ 15h × (emittance_nominal / emittance_atual)
     """
-    cross_section_cm2 = cross_section_mb * 1e-27   # mb → cm²
-    return lumi * cross_section_cm2
+    nominal_emittance = 2.5   # μm rad (nominal)
+    tau_base = 15.0           # horas (tempo de vida nominal)
+    emittance_factor = max(nominal_emittance / max(emittance_um, 0.1), 0.1)
+    energy_factor = min(energy_tev / LHC_MAX_ENERGY_TEV, 1.0)
+    return tau_base * emittance_factor * energy_factor
 
 
-def kinetic_energy_tev(beta: float) -> float:
+def emittance_growth(emittance_um: float, energy_tev: float,
+                     dt_s: float) -> float:
     """
-    Energia cinética relativística em TeV a partir de v/c.
+    Crescimento da emittance transversal ao longo do tempo.
 
-    E_cin = (γ - 1) · m₀c²
+    Causado por: IBS (Intra-Beam Scattering), noise de RF,
+    ressonâncias magnéticas.
 
-    Args:
-        beta: v/c (velocidade como fração da luz)
-
-    Returns:
-        Energia cinética em TeV
+    Taxa típica: ~0.5 μm/h no LHC nominal.
     """
-    if beta >= 1.0:
-        beta = 0.9999999
-    gamma = 1 / math.sqrt(1 - beta**2)
-    energy_gev = (gamma - 1) * PROTON_MASS_GEV
-    return energy_gev * TEV_PER_GEV
+    growth_rate = 0.5 / 3600   # μm/s
+    # Cresce mais rápido em baixa energia (IBS mais intenso)
+    energy_factor = 1.5 - 0.5 * min(energy_tev / LHC_MAX_ENERGY_TEV, 1.0)
+    return emittance_um + growth_rate * energy_factor * dt_s
+
+
+def quench_risk(beam_loss_rate: float, magnet_temp_k: float) -> float:
+    """
+    Risco de quench (perda de supercondutividade) entre 0 e 1.
+
+    Um quench ocorre quando:
+      - Temperatura local > 9.2K (temperatura crítica do NbTi)
+      - Perdas de feixe depositam energia no imã
+    """
+    temp_risk = max(0.0, (magnet_temp_k - 1.9) / (9.2 - 1.9))
+    loss_risk = min(beam_loss_rate / 1e8, 1.0)
+    return min(temp_risk * 0.7 + loss_risk * 0.3, 1.0)
