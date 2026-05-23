@@ -10,9 +10,13 @@ Rotas:
   GET  /api/stream         → Stream SSE com status em tempo real
   GET  /api/status         → Snapshot único do estado atual
 
-Para rodar:
-  pip install flask flask-cors
+Para rodar localmente:
+  pip install flask gunicorn
   python app.py
+
+Para deploy no Render:
+  Build Command:  pip install -r requirements.txt
+  Start Command:  gunicorn --chdir backend app:app --bind 0.0.0.0:$PORT --threads 4
 """
 
 import json
@@ -24,8 +28,8 @@ from flask import Flask, render_template, jsonify, request, Response, stream_wit
 from accelerator import Accelerator, AcceleratorState
 
 # ── Caminhos absolutos baseados na localização deste arquivo ─────────────────
-# Usando os.path.dirname(__file__) garantimos que os caminhos funcionam
-# independente de onde o usuário rodar o comando `python app.py`.
+# os.path.abspath(__file__) garante que funciona de qualquer diretório,
+# inclusive quando o gunicorn sobe via --chdir no Render.
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)   # pasta hadron/
 
@@ -37,7 +41,7 @@ app = Flask(
     static_folder=os.path.join(_ROOT, "frontend", "static"),
 )
 
-# CORS manual — sem dependência de flask-cors
+# CORS manual — sem dependência externa
 @app.after_request
 def add_cors(response):
     response.headers["Access-Control-Allow-Origin"]  = "*"
@@ -50,9 +54,9 @@ accel = Accelerator()
 # Lock para acesso thread-safe ao acelerador
 accel_lock = threading.Lock()
 
-# Tick rate da simulação (segundos entre atualizações)
-TICK_INTERVAL = 0.1   # 10 Hz
-SIM_DT        = 0.5   # "segundos simulados" por tick (rampa mais rápida na demo)
+# Tick rate da simulação
+TICK_INTERVAL = 0.1   # segundos reais entre ticks (10 Hz)
+SIM_DT        = 0.5   # "segundos simulados" por tick
 
 
 # ── Thread de simulação ──────────────────────────────────────────────────────
@@ -61,6 +65,8 @@ def simulation_loop():
     """
     Roda em background, avançando a física a cada TICK_INTERVAL segundos.
     Separado das rotas HTTP para não bloquear requisições.
+    O gunicorn com --threads compartilha este processo, então o daemon=True
+    garante que a thread encerra junto com o worker.
     """
     while True:
         with accel_lock:
@@ -81,10 +87,7 @@ def index():
 
 @app.route("/api/status")
 def api_status():
-    """
-    Retorna snapshot único do estado atual.
-    Útil para inicialização do frontend.
-    """
+    """Snapshot único do estado atual — usado na inicialização do frontend."""
     with accel_lock:
         return jsonify(accel.status.to_dict())
 
@@ -95,12 +98,12 @@ def api_command(cmd: str):
     Executa um comando no acelerador.
 
     Comandos válidos:
-      inject    — injeta o feixe (opcionalmente recebe n_bunches no body)
-      accelerate — inicia rampa de energia
-      collide   — ativa colisões
-      dump      — descarta o feixe
+      inject     — injeta o feixe (body JSON opcional: {"n_bunches": 2556})
+      accelerate — inicia rampa de energia via cavidades RF
+      collide    — ativa colisões nos pontos de interação
+      dump       — descarta o feixe e reseta o sistema
 
-    Retorna JSON com { success: bool, message: str }
+    Retorna: { "success": bool, "message": str }
     """
     handlers = {
         "inject":     _cmd_inject,
@@ -128,28 +131,40 @@ def _cmd_inject():
 @app.route("/api/stream")
 def api_stream():
     """
-    Server-Sent Events — envia o estado do acelerador ao frontend
-    continuamente, sem polling.
+    Server-Sent Events — empurra o estado do acelerador ao frontend em tempo real.
 
-    O frontend recebe eventos assim:
-      data: {"state": "COLLIDING", "energy_tev": 6.8, ...}
-
-    SSE é ideal aqui porque:
-      - O servidor empurra dados (não o cliente que pede)
+    Por que SSE e não WebSocket?
+      - Fluxo unidirecional (servidor → cliente) — SSE é mais simples
       - Reconexão automática pelo browser
-      - Sem overhead de WebSocket para fluxo unidirecional
+      - Funciona nativamente com fetch/EventSource, sem biblioteca
+
+    Notas para produção (Render):
+      - O header X-Accel-Buffering: no desativa o buffer do nginx/proxy
+      - O timeout de 25s evita que o Render feche conexões inativas
+        (o Render tem timeout de 30s em conexões sem atividade)
     """
     def event_generator():
         last_snapshot = None
+        last_heartbeat = time.time()
+
         while True:
             with accel_lock:
                 snapshot = accel.status.to_dict()
 
-            # Só envia se algo mudou (economiza banda)
+            now = time.time()
+
+            # Envia dados se algo mudou
             if snapshot != last_snapshot:
                 payload = json.dumps(snapshot)
                 yield f"data: {payload}\n\n"
                 last_snapshot = snapshot
+                last_heartbeat = now
+
+            # Heartbeat a cada 25s para manter a conexão viva no Render
+            # (o proxy fecha conexões sem atividade após ~30s)
+            elif now - last_heartbeat > 25:
+                yield ": heartbeat\n\n"
+                last_heartbeat = now
 
             time.sleep(TICK_INTERVAL)
 
@@ -157,17 +172,21 @@ def api_stream():
         stream_with_context(event_generator()),
         mimetype="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",   # desativa buffer do nginx
+            "Cache-Control":      "no-cache",
+            "X-Accel-Buffering":  "no",    # desativa buffer do nginx/Render proxy
+            "Connection":         "keep-alive",
         }
     )
 
 
-# ── Entry point ──────────────────────────────────────────────────────────────
+# ── Entry point (desenvolvimento local) ─────────────────────────────────────
+# No Render, o gunicorn importa `app` diretamente — este bloco não executa.
+# debug=False é obrigatório com gunicorn (o reloader do debug conflita).
 
 if __name__ == "__main__":
     print("=" * 55)
     print("  HADRON — Particle Accelerator Simulator")
-    print("  Servidor rodando em http://localhost:5000")
+    print("  http://localhost:5000")
+    print("  Para produção: gunicorn app:app --threads 4")
     print("=" * 55)
-    app.run(debug=True, threaded=True, port=5000)
+    app.run(debug=False, threaded=True, port=5000)
