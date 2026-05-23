@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HADRON — Particle Accelerator Simulator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+  <!-- ── Cabeçalho ──────────────────────────────────────────────────────── -->
+  <header>
+    <h1>HADRON</h1>
+    <div class="tagline">LARGE HADRON COLLIDER SIMULATOR · CERN-MOCK FACILITY · v3.0</div>
+    <div id="state-badge" class="state-badge state-idle">IDLE</div>
+  </header>
+
+  <!-- ── Layout principal: painel esq | canvas | painel dir ─────────────── -->
+  <div class="main-layout">
+
+    <!-- PAINEL ESQUERDO — parâmetros do feixe -->
+    <div class="panel">
+
+      <!-- Energia do feixe -->
+      <div class="meter">
+        <div class="meter-label">BEAM ENERGY</div>
+        <div class="meter-value" id="m-energy-val">0.00</div>
+        <div class="meter-unit">TeV POR FEIXE</div>
+        <div class="bar-track"><div class="bar-fill" id="m-energy-bar" style="width:0%"></div></div>
+      </div>
+
+      <!-- Fator de Lorentz γ -->
+      <div class="meter">
+        <div class="meter-label">FATOR DE LORENTZ γ</div>
+        <div class="meter-value" id="m-gamma-val">1</div>
+        <div class="meter-unit">γ = E_total / m₀c²</div>
+        <div class="bar-track"><div class="bar-fill" id="m-gamma-bar" style="width:0%"></div></div>
+      </div>
+
+      <!-- β = v/c -->
+      <div class="meter">
+        <div class="meter-label">VELOCIDADE β (v/c)</div>
+        <div class="meter-value" id="m-beta-val">0.000000</div>
+        <div class="meter-unit">FRAÇÃO DA VELOCIDADE DA LUZ</div>
+        <div class="bar-track"><div class="bar-fill" id="m-beta-bar" style="width:0%"></div></div>
+      </div>
+
+      <!-- Campo magnético -->
+      <div class="meter">
+        <div class="meter-label">CAMPO DIPOLAR</div>
+        <div class="meter-value" id="m-magnetic-val">0.00</div>
+        <div class="meter-unit">TESLA (máx 8.33 T)</div>
+        <div class="bar-track"><div class="bar-fill" id="m-magnetic-bar" style="width:0%"></div></div>
+      </div>
+
+      <!-- Temperatura criogênica -->
+      <div class="meter">
+        <div class="meter-label">TEMPERATURA</div>
+        <div class="meter-value" id="m-temp-val">1.90</div>
+        <div class="meter-unit">KELVIN (He superfluido)</div>
+        <div class="bar-track"><div class="bar-fill" id="m-temp-bar" style="width:1%; background:var(--accent)"></div></div>
+      </div>
+
+    </div>
+
+    <!-- CANVAS + STATUS BAR -->
+    <div class="canvas-wrap">
+      <canvas id="ring-canvas" width="480" height="480"></canvas>
+
+      <!-- Indicadores de sistema -->
+      <div class="status-bar">
+        <div class="status-item">
+          <div class="dot dot-active" id="dot-cryo"></div>
+          CRIOGÊNICO
+        </div>
+        <div class="status-item">
+          <div class="dot dot-inactive" id="dot-beam"></div>
+          FEIXE
+        </div>
+        <div class="status-item">
+          <div class="dot dot-inactive" id="dot-stable"></div>
+          ESTÁVEL
+        </div>
+        <div class="status-item">
+          <div class="dot dot-inactive" id="dot-coll"></div>
+          COLISÃO
+        </div>
+        <div class="uptime">
+          UP: <span id="uptime">00:00:00</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAINEL DIREITO — controles e telemetria de colisão -->
+    <div class="panel">
+
+      <!-- Botões de comando do operador -->
+      <div class="controls">
+        <button class="btn-cmd" onclick="cmdInject()">
+          [ INJECT BEAM ]<br>
+          <span style="font-size:0.42rem;color:var(--text-dim)">SPS → LHC · 2556 bunches</span>
+        </button>
+        <button class="btn-cmd" onclick="cmdAccelerate()">
+          [ ACCELERATE ]<br>
+          <span style="font-size:0.42rem;color:var(--text-dim)">Cavidades RF 400 MHz</span>
+        </button>
+        <button class="btn-cmd btn-danger" onclick="cmdCollide()">
+          [ COLLIDE ]<br>
+          <span style="font-size:0.42rem">IP1 · IP5 · IP2 · IP8</span>
+        </button>
+        <button class="btn-cmd btn-dump" onclick="cmdDump()">
+          [ DUMP BEAM ]<br>
+          <span style="font-size:0.42rem;color:var(--text-dim)">Abort kicker — reset</span>
+        </button>
+      </div>
+
+      <!-- Luminosidade -->
+      <div class="meter meter-lumi">
+        <div class="meter-label">LUMINOSIDADE INSTANTÂNEA</div>
+        <div class="meter-value" id="m-lumi-val">0</div>
+        <div class="meter-unit">cm⁻² s⁻¹</div>
+        <div class="bar-track"><div class="bar-fill" id="m-lumi-bar" style="width:0%"></div></div>
+      </div>
+
+      <!-- Taxa de colisão -->
+      <div class="meter">
+        <div class="meter-label">TAXA DE COLISÃO</div>
+        <div class="meter-value" id="m-coll-val">0</div>
+        <div class="meter-unit">EVENTOS / SEGUNDO</div>
+        <div class="bar-track"><div class="bar-fill" id="m-coll-bar" style="width:0%; background:var(--hot)"></div></div>
+      </div>
+
+      <!-- Total de colisões -->
+      <div class="meter">
+        <div class="meter-label">COLISÕES TOTAIS</div>
+        <div class="meter-value" id="m-total-val">0</div>
+        <div class="meter-unit">EVENTOS ACUMULADOS</div>
+      </div>
+
+      <!-- Bunches -->
+      <div class="meter">
+        <div class="meter-label">BUNCHES POR FEIXE</div>
+        <div class="meter-value" id="m-bunches-val">0</div>
+        <div class="meter-unit">DE 2556 MÁXIMO</div>
+        <div class="bar-track"><div class="bar-fill" id="m-bunches-bar" style="width:0%"></div></div>
+      </div>
+
+      <!-- Log de sistema -->
+      <div class="log-box">
+        <div id="log-container"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/accelerator.js') }}"></script>
+</body>
+</html>
