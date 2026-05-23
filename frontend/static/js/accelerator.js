@@ -271,38 +271,51 @@ function drawInteractionPoints() {
 }
 
 function drawParticles() {
-  const speedMult = 0.5 + (vis.energyTev / 6.8) * 1.5;
+  const energyFrac = Math.min(vis.energyTev / 6.8, 1);
+
+  // Velocidade visual: cresce muito rápido com energia
+  // A partir de ~4 TeV as partículas já estão voando
+  const speedMult = 0.5 + energyFrac * 8.0;
+
+  // Trail: cresce até 120 pontos em alta energia (rastro longo = blur de velocidade)
+  const maxTrail = Math.round(8 + energyFrac * 112);
+
+  // Acima de 60% da energia máxima, o núcleo some — só rastro
+  const coreOpacity = Math.max(0, 1 - (energyFrac - 0.6) / 0.4);
 
   vis.particles.forEach(p => {
-    // Avança ângulo (proporcional à energia)
     p.angle += p.speed * p.dir * speedMult;
 
     const px = CX + Math.cos(p.angle) * p.r;
     const py = CY + Math.sin(p.angle) * p.r;
 
-    // Acumula trail
     p.trail.push({ x: px, y: py });
-    if (p.trail.length > 30) p.trail.shift();
+    if (p.trail.length > maxTrail) p.trail.shift();
 
-    // Desenha rastro com fade
+    // Rastro: em alta velocidade fica mais espesso e brilhante
+    const trailWidth = 0.8 + energyFrac * 2.5;
+    const trailGlow  = 0.5 + energyFrac * 0.5;
+
     for (let i = 1; i < p.trail.length; i++) {
       const t = i / p.trail.length;
       ctx.beginPath();
       ctx.moveTo(p.trail[i - 1].x, p.trail[i - 1].y);
       ctx.lineTo(p.trail[i].x,     p.trail[i].y);
-      ctx.strokeStyle = p.color.replace(")", `,${t * 0.5})`).replace("rgb", "rgba");
-      ctx.lineWidth   = p.size * 0.5 * t;
+      ctx.strokeStyle = p.color.replace(")", `,${t * trailGlow})`).replace("rgb", "rgba");
+      ctx.lineWidth   = trailWidth * t;
       ctx.stroke();
     }
 
-    // Núcleo da partícula
-    ctx.beginPath();
-    ctx.arc(px, py, p.size, 0, Math.PI * 2);
-    ctx.fillStyle   = p.color;
-    ctx.shadowColor = p.color;
-    ctx.shadowBlur  = 8 + vis.energyTev * 1.5;
-    ctx.fill();
-    ctx.shadowBlur  = 0;
+    // Núcleo desaparece progressivamente com a velocidade
+    if (coreOpacity > 0.01) {
+      ctx.beginPath();
+      ctx.arc(px, py, p.size, 0, Math.PI * 2);
+      ctx.fillStyle   = p.color.replace(")", `,${coreOpacity})`).replace("rgb", "rgba");
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur  = 8 + vis.energyTev * 2;
+      ctx.fill();
+      ctx.shadowBlur  = 0;
+    }
   });
 }
 
@@ -375,25 +388,23 @@ function drawCenterLabel() {
   }
 }
 
-// ── SSE — recebe estado do backend ───────────────────────────────────────────
+// ── Polling — recebe estado do backend a cada 500ms ─────────────────────────
+//
+// SSE é mais elegante mas proxies de produção (Render) cortam conexões longas.
+// Polling simples em /api/status é mais confiável.
 
-/**
- * Conecta ao stream SSE do Flask e atualiza vis + telemetria a cada evento.
- * O browser reconecta automaticamente se a conexão cair.
- */
-function connectSSE() {
-  const source = new EventSource("/api/stream");
-
-  source.onmessage = (event) => {
-    const data = JSON.parse(event.data);
+async function pollStatus() {
+  try {
+    const res  = await fetch("/api/status");
+    const data = await res.json();
     applyBackendState(data);
-  };
-
-  source.onerror = () => {
-    console.warn("SSE desconectado. Reconectando...");
-    setTimeout(connectSSE, 2000);
-  };
+  } catch (err) {
+    console.warn("Polling falhou, tentando novamente...", err);
+  }
+  setTimeout(pollStatus, 500);
 }
+
+function connectSSE() { pollStatus(); }
 
 /**
  * Aplica o estado recebido do backend à visualização e telemetria.
