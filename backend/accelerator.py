@@ -208,6 +208,8 @@ class Accelerator:
             s.rf_voltage_mv = 12.0 + (s.energy_tev / ph.LHC_MAX_ENERGY_TEV) * 4.0
 
             if s.energy_tev >= s.target_energy_tev:
+                if s.state == AcceleratorState.ACCELERATING:
+                    s.state = AcceleratorState.STABLE
                 self._log(f"Energia nominal: {s.energy_tev:.2f} TeV ✓", "INFO")
                 self._log("FEIXES ESTÁVEIS declarados", "INFO")
                 self._add_alarm("STB-01", "Stable beams @ 6.8 TeV", "INFO")

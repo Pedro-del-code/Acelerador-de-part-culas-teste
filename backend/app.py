@@ -56,7 +56,7 @@ accel_lock = threading.Lock()
 
 # Tick rate da simulação
 TICK_INTERVAL = 0.1   # segundos reais entre ticks (10 Hz)
-SIM_DT        = 0.5   # "segundos simulados" por tick
+SIM_DT        = 1.5   # "segundos simulados" por tick (mais rápido no Render)
 
 
 # ── Thread de simulação ──────────────────────────────────────────────────────
