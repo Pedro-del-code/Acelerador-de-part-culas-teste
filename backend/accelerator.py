@@ -158,9 +158,9 @@ class Accelerator:
         return self._ok("Aceleração iniciada.")
 
     def cmd_collide(self) -> dict:
-        if self.status.energy_tev < 1.0:
+        if self.status.energy_tev < 0.45:
             return self._err(f"Energia insuficiente: {self.status.energy_tev:.2f} TeV")
-        if self.status.state not in (AcceleratorState.STABLE, AcceleratorState.ACCELERATING):
+        if self.status.state not in (AcceleratorState.INJECTED, AcceleratorState.ACCELERATING, AcceleratorState.STABLE):
             return self._err("Requer feixe estável ou em aceleração.")
 
         self.status.state = AcceleratorState.COLLIDING
@@ -199,17 +199,18 @@ class Accelerator:
         if self._start_time:
             s.uptime_s = time.time() - self._start_time
 
-        # Rampa de energia
-        if s.state == AcceleratorState.ACCELERATING:
+        # Rampa de energia — continua mesmo em COLLIDING
+        # Isso permite: INJECT → COLLIDE → ACCELERATE em paralelo
+        if s.state in (AcceleratorState.ACCELERATING, AcceleratorState.COLLIDING) \
+                and s.energy_tev < s.target_energy_tev:
             s.energy_tev = min(s.target_energy_tev,
                                s.energy_tev + self._ramp_rate * dt)
             s.rf_voltage_mv = 12.0 + (s.energy_tev / ph.LHC_MAX_ENERGY_TEV) * 4.0
 
             if s.energy_tev >= s.target_energy_tev:
-                s.state = AcceleratorState.STABLE
                 self._log(f"Energia nominal: {s.energy_tev:.2f} TeV ✓", "INFO")
                 self._log("FEIXES ESTÁVEIS declarados", "INFO")
-                self._add_alarm("STB-01", "Stable beams declared", "INFO")
+                self._add_alarm("STB-01", "Stable beams @ 6.8 TeV", "INFO")
 
         # Física contínua se feixe ativo
         if s.state not in (AcceleratorState.IDLE, AcceleratorState.FAULT):
