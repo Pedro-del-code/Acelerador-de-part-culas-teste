@@ -160,11 +160,19 @@ function drawDetectorPoints() {
 
 function drawParticles() {
   const f = Math.min(vis.energyTev / 6.8, 1);
-  const speedMult   = 0.5 + f * 9.0;
-  const maxTrail    = Math.round(8 + f * 130);
-  const coreOpacity = Math.max(0, 1 - (f - 0.55) / 0.45);
-  const trailW      = 0.7 + f * 2.8;
-  const trailAlpha  = 0.45 + f * 0.55;
+
+  // Velocidade: cresce exponencialmente — a 6.8 TeV é absurdamente rápida
+  const speedMult   = 0.4 + Math.pow(f, 1.5) * 40.0;
+
+  // Trail: longo o suficiente pra cobrir o anel inteiro em alta energia
+  const maxTrail    = Math.round(6 + f * 300);
+
+  // Núcleo some a partir de 30% da energia máxima
+  const coreOpacity = Math.max(0, 1 - (f - 0.3) / 0.3);
+
+  // Rastro cada vez mais espesso e brilhante
+  const trailW      = 0.5 + f * 3.5;
+  const trailAlpha  = 0.35 + f * 0.65;
 
   vis.particles.forEach(p => {
     p.angle += p.speed * p.dir * speedMult;
