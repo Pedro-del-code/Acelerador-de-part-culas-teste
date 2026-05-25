@@ -563,12 +563,22 @@ const toSci = n => {
 function updateTelemetry(d) {
   setMeter("energy",    fmt(d.energy_tev),       d.energy_tev/6.8);
   setMeter("ecm",       fmt(d.energy_tev * 2),   d.energy_tev/6.8);
-  setMeter("gamma",     fmt(d.gamma,0),           Math.min(d.gamma/7500,1));
-  setMeter("beta",      fmt(d.beta,6),            d.beta);
+  setMeter("gamma",     fmt(d.gamma,0),           d.gamma > 1 ? Math.min(Math.log10(d.gamma) / Math.log10(7500), 1) : 0);
+  // beta no LHC fica entre 0.9999991 e 0.9999999 — a barra e o valor
+  // mostram (1 - beta) em notação científica, que é o que realmente varia
+  const betaVal  = d.beta || 0;
+  const betaDiff = Math.max(0, 1 - betaVal);
+  const betaStr  = betaVal === 0 ? "0.000000"
+                 : betaDiff < 1e-4 ? `1 − ${betaDiff.toExponential(2)}`
+                 : fmt(betaVal, 6);
+  // Barra: escala logarítmica de 0 (parado) a 1 (6.8 TeV)
+  const betaFrac = betaVal > 0 ? Math.min(Math.log10(betaVal * 1e7) / 7, 1) : 0;
+  setMeter("beta", betaStr, betaFrac);
   setMeter("magnetic",  fmt(d.magnetic_field_t),  d.magnetic_field_t/8.33);
   setMeter("temp",      fmt(d.cryo_temp_k||1.9,3),(Math.min((d.cryo_temp_k||1.9)-1.9,3)/3), "danger");
   setMeter("current",   fmt((d.n_bunches||0)*0.58,1), Math.min((d.n_bunches||0)/2556,1));
-  setMeter("synrad",    fmt((d.synchrotron_loss_gev||0)*1e6,1), 0);
+  const synradKeV  = (d.synchrotron_loss_gev || 0) * 1e6;
+  setMeter("synrad", synradKeV > 0 ? synradKeV.toFixed(2) : "0.0", Math.min(synradKeV / 7, 1));
   setMeter("lumi",      toSci(d.luminosity),      Math.min((d.luminosity||0)/1.5e34,1));
   setMeter("pileup",    fmt((d.luminosity||0)/1e30,1), 0);
   setMeter("coll",      fmtB(Math.round(d.collision_rate||0)), Math.min((d.collision_rate||0)/9e8,1));
