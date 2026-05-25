@@ -145,6 +145,14 @@ function triggerCatastrophe() {
 }
 
 function startBlackoutSequence() {
+  // Limpa todos os efeitos visuais antes do overlay
+  vis.sparks      = [];
+  vis.shockwaves  = [];
+  vis.flashes     = [];
+  vis.plasmaRings = [];
+  vis.particles   = [];
+  vis.collisionPulse = 0;
+
   const overlay = document.getElementById("catastrophe-overlay");
   if (!overlay) return;
   overlay.style.display = "flex";
@@ -192,6 +200,15 @@ function addCriticalLog(msg) {
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function render() {
+  // Phase 3: tela preta total — nada mais renderiza no canvas
+  if (vis.catastrophePhase >= 3) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    vis.frame++;
+    requestAnimationFrame(render);
+    return;
+  }
+
   // Glitch na catástrofe
   let glitchOffsetX = 0, glitchOffsetY = 0;
   if (vis.catastrophePhase >= 1) {
@@ -726,5 +743,24 @@ document.addEventListener("keydown", e => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-pollStatus();
+// Ao recarregar a página, reseta o backend para IDLE caso ainda esteja ativo.
+// Isso garante que após o reload da catástrofe o acelerador começa limpo.
+async function bootReset() {
+  try {
+    const res  = await fetch("/api/status");
+    const data = await res.json();
+    if (data.state && data.state !== "IDLE") {
+      await fetch("/api/command/dump", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    }
+  } catch(e) {
+    console.warn("Boot reset falhou:", e);
+  }
+  pollStatus();
+}
+
+bootReset();
 render();
