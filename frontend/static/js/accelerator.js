@@ -164,7 +164,7 @@ function startBlackoutSequence() {
     "EMERGENCY SHUTDOWN INITIATED",
     "DETECTOR SYSTEMS OFFLINE",
     "EVACUATING PERSONNEL...",
-    "REBOOTING CONTROL SYSTEMS...",
+    "Shutdown de CPU em relatividade...",
   ];
 
   let i = 0;
@@ -173,6 +173,15 @@ function startBlackoutSequence() {
     if (i < lines.length && msgEl) {
       const line = document.createElement("div");
       line.className = "overlay-line";
+      // Última mensagem recebe estilo destacado
+      if (i === lines.length - 1) {
+        line.style.color        = "#ffffff";
+        line.style.fontWeight   = "bold";
+        line.style.marginTop    = "12px";
+        line.style.fontSize     = "0.75rem";
+        line.style.letterSpacing= "0.2em";
+        line.style.textShadow   = "0 0 12px #fff, 0 0 30px rgba(255,255,255,0.4)";
+      }
       line.textContent = "> " + lines[i];
       msgEl.appendChild(line);
       i++;
@@ -200,15 +209,6 @@ function addCriticalLog(msg) {
 
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function render() {
-  // Phase 3: tela preta total — nada mais renderiza no canvas
-  if (vis.catastrophePhase >= 3) {
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    vis.frame++;
-    requestAnimationFrame(render);
-    return;
-  }
-
   // Glitch na catástrofe
   let glitchOffsetX = 0, glitchOffsetY = 0;
   if (vis.catastrophePhase >= 1) {
@@ -257,14 +257,7 @@ function drawRingGlow() {
   const g = ctx.createRadialGradient(CX, CY, RING_R-14, CX, CY, RING_R+14);
 
   // Muda cor na catástrofe
-  // Transição gradual ciano → vermelho desde o buildup
-  const ringRedT = vis.catastrophePhase === 0 ? 0
-                 : vis.catastrophePhase === 1 ? Math.min(vis.catastropheTimer / 3.0, 1)
-                 : 1;
-  const rR = Math.round(0   + (255-0)   * ringRedT);
-  const rG = Math.round(245 + (60-245)  * ringRedT);
-  const rB = Math.round(255 + (0-255)   * ringRedT);
-  const color = `${rR},${rG},${rB}`;
+  const color = vis.catastrophePhase >= 2 ? "255,60,0" : "0,245,255";
   g.addColorStop(0,   `rgba(${color},0)`);
   g.addColorStop(0.5, `rgba(${color},${Math.min(a,0.6)})`);
   g.addColorStop(1,   `rgba(${color},0)`);
@@ -353,39 +346,25 @@ function drawParticles() {
     p.trail.push({x:px, y:py});
     if (p.trail.length > maxTrail) p.trail.shift();
 
-    // Interpolação gradual ciano→vermelho durante buildup e explosão
-    // redT vai de 0 (normal) a 1 (catástrofe total)
-    const redT = vis.catastrophePhase === 0 ? 0
-               : vis.catastrophePhase === 1 ? Math.min(vis.catastropheTimer / 3.0, 1)
-               : 1;
-
-    // Feixe 1: ciano (#00f5ff) → laranja-vermelho (#ff2200)
-    // Feixe 2: laranja (#ff6b00) → vermelho puro (#ff0000)
-    function lerpColor(t, r1,g1,b1, r2,g2,b2) {
-      return [
-        Math.round(r1 + (r2-r1)*t),
-        Math.round(g1 + (g2-g1)*t),
-        Math.round(b1 + (b2-b1)*t),
-      ];
-    }
-    const [cr,cg,cb] = p.dir === 1
-      ? lerpColor(redT,   0,245,255,  255, 30,  0)   // ciano → vermelho
-      : lerpColor(redT, 255,107,  0,  255,  0,  0);  // laranja → vermelho
+    // Cor muda para vermelho na catástrofe
+    const trailColor = vis.catastrophePhase >= 2
+      ? p.color.replace("#00f5ff","#ff4400").replace("#ff6b00","#ff0000")
+      : p.color;
 
     for (let i = 1; i < p.trail.length; i++) {
       const t = i / p.trail.length;
       ctx.beginPath();
       ctx.moveTo(p.trail[i-1].x, p.trail[i-1].y);
       ctx.lineTo(p.trail[i].x,   p.trail[i].y);
-      ctx.strokeStyle = `rgba(${cr},${cg},${cb},${t*trailAlpha})`;
+      ctx.strokeStyle = trailColor.replace(")", `,${t*trailAlpha})`).replace("rgb","rgba").replace("#","rgba(").replace(/^rgba\(([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2}),/, (m,r,g,b) => `rgba(${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)},`);
       ctx.lineWidth   = trailW * t;
       ctx.stroke();
     }
     if (coreOpacity > 0.02) {
       ctx.beginPath(); ctx.arc(px, py, p.size, 0, Math.PI*2);
-      ctx.fillStyle   = `rgba(${cr},${cg},${cb},${coreOpacity})`;
-      ctx.shadowColor = `rgb(${cr},${cg},${cb})`;
-      ctx.shadowBlur  = 10 + vis.energyTev*2 + redT * 25;
+      const coreColor = vis.catastrophePhase >= 2 ? "#ff4400" : p.color;
+      ctx.fillStyle   = `${coreColor}${Math.round(coreOpacity*255).toString(16).padStart(2,'0')}`;
+      ctx.shadowColor = coreColor; ctx.shadowBlur = 10 + vis.energyTev*2 + vis.catastrophePhase * 15;
       ctx.fill(); ctx.shadowBlur = 0;
     }
   });
@@ -444,24 +423,18 @@ function drawFlashes() {
 }
 
 function drawCenter() {
-  const centerRedT = vis.catastrophePhase === 0 ? 0
-                   : vis.catastrophePhase === 1 ? Math.min(vis.catastropheTimer / 3.0, 1)
-                   : 1;
-  const ccR = Math.round(0   + 255 * centerRedT);
-  const ccG = Math.round(245 + (0-245) * centerRedT);
-  const ccB = Math.round(255 + (60-255) * centerRedT);
-  const catColor = `${ccR},${ccG},${ccB}`;
+  const catColor = vis.catastrophePhase >= 2 ? "255,0,60" : "0,245,255";
 
   ctx.beginPath(); ctx.arc(CX, CY, 68, 0, Math.PI*2);
   ctx.fillStyle = `rgba(${catColor},0.03)`; ctx.fill();
   ctx.strokeStyle = `rgba(${catColor},0.07)`; ctx.lineWidth = 1; ctx.stroke();
 
   ctx.font = "bold 22px 'Share Tech Mono'";
-  ctx.fillStyle = `rgba(${catColor},${0.3 + centerRedT * 0.5})`;
+  ctx.fillStyle = vis.catastrophePhase >= 1 ? `rgba(255,60,0,0.8)` : "rgba(0,245,255,0.3)";
   ctx.textAlign = "center"; ctx.fillText("LHC", CX, CY-6);
 
   ctx.font = "10px 'Share Tech Mono'";
-  ctx.fillStyle = `rgba(${catColor},${0.45 + centerRedT * 0.5})`;
+  ctx.fillStyle = vis.catastrophePhase >= 1 ? `rgba(255,0,60,0.9)` : "rgba(0,180,200,0.45)";
   ctx.fillText(vis.catastrophePhase >= 2 ? "FAULT" : vis.state, CX, CY+10);
 
   const frac = Math.min(vis.energyTev/6.8, 1);
@@ -770,8 +743,7 @@ document.addEventListener("keydown", e => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-// Ao recarregar a página, reseta o backend para IDLE caso ainda esteja ativo.
-// Isso garante que após o reload da catástrofe o acelerador começa limpo.
+// Reseta o backend para IDLE ao recarregar a página
 async function bootReset() {
   try {
     const res  = await fetch("/api/status");
@@ -783,9 +755,7 @@ async function bootReset() {
         body: JSON.stringify({}),
       });
     }
-  } catch(e) {
-    console.warn("Boot reset falhou:", e);
-  }
+  } catch(e) { console.warn("Boot reset falhou:", e); }
   pollStatus();
 }
 
